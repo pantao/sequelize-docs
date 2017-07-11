@@ -162,3 +162,93 @@ Sequelize.GEOMETRY('POINT', 4326)     // Spatial column with geometry type and S
 ```
 
 `BLOB` 数据可以以字符或者 `buffer` 的类型写入，但是读出时，将永远都以 `buffer` 类型返回。
+
+如果你使用的是PostgreSQL 的无时区 TIMESTAMP ，并且你需要将其转换成其它时区的值，可以使用 `pg` 自己的解析器：
+
+```javascript
+require('pg').types.setTypeParser(1114, stringValue => {
+  return new Date(stringValue + '+0000')
+})
+```
+
+在上面的数据类型中， `integer`、`bigint`、`float` 以及 `double` 这几种类型还支持 `unsigned` 以及 `zerofill` 属性，在添加时，也不需要考虑顺序。
+
+```javascript
+Sequelize.INTEGER.UNSIGNED              // INTEGER UNSIGNED
+Sequelize.INTEGER(11).UNSIGNED          // INTEGER(11) UNSIGNED
+Sequelize.INTEGER(11).ZEROFILL          // INTEGER(11) ZEROFILL
+Sequelize.INTEGER(11).ZEROFILL.UNSIGNED // INTEGER(11) UNSIGNED ZEROFILL
+Sequelize.INTEGER(11).UNSIGNED.ZEROFILL // INTEGER(11) UNSIGNED ZEROFILL
+```
+
+*上面的示例只展示了 `integer`，`bigint` 以及 `float` 的设置方法也一样。
+
+对于  `enums`：
+
+```javascript
+sequelize.define('model', {
+  states: {
+    type: Sequelize.ENUM,
+    values: ['active', 'pending', 'deleted']
+  }
+})
+```
+
+## Range 类型
+
+由于 Range 类型需要定义包含/排除这样的额外信息，在JavaScript单纯使用一个元组并不能满足所有要求，以值的方式提供范围时，可以使用下面这些方法：
+
+```javascript
+// defaults to '["2016-01-01 00:00:00+00:00", "2016-02-01 00:00:00+00:00")'
+// inclusive lower bound, exclusive upper bound
+Timeline.create({ range: [new Date(Date.UTC(2016, 0, 1)), new Date(Date.UTC(2016, 1, 1))] });
+
+// control inclusion
+const range = [new Date(Date.UTC(2016, 0, 1)), new Date(Date.UTC(2016, 1, 1))];
+range.inclusive = false; // '()'
+range.inclusive = [false, true]; // '(]'
+range.inclusive = true; // '[]'
+range.inclusive = [true, false]; // '[)'
+
+// or as a single expression
+const range = [
+  { value: new Date(Date.UTC(2016, 0, 1)), inclusive: false },
+  { value: new Date(Date.UTC(2016, 1, 1)), inclusive: true },
+];
+// '("2016-01-01 00:00:00+00:00", "2016-02-01 00:00:00+00:00"]'
+
+// composite form
+const range = [
+  { value: new Date(Date.UTC(2016, 0, 1)), inclusive: false },
+  new Date(Date.UTC(2016, 1, 1)),
+];
+// '("2016-01-01 00:00:00+00:00", "2016-02-01 00:00:00+00:00")'
+
+Timeline.create({ range });
+```
+
+需要注意的是，你收到的值 也将是下面这样的：
+
+```javascript
+// stored value: ("2016-01-01 00:00:00+00:00", "2016-02-01 00:00:00+00:00"]
+range // [Date, Date]
+range.inclusive // [false, true]
+```
+
+请确保你在序列化之前已经将其转换为一个可序列化的格式，否则数组的扩展属性将不能被序列化。
+
+### 特殊案例
+
+```javascript
+// empty range:
+Timeline.create({ range: [] }); // range = 'empty'
+
+// Unbounded range:
+Timeline.create({ range: [null, null] }); // range = '[,)'
+// range = '[,"2016-01-01 00:00:00+00:00")'
+Timeline.create({ range: [null, new Date(Date.UTC(2016, 0, 1))] });
+
+// Infinite range:
+// range = '[-infinity,"2016-01-01 00:00:00+00:00")'
+Timeline.create({ range: [-Infinity, new Date(Date.UTC(2016, 0, 1))] });
+```
