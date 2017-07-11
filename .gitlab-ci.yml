@@ -1,0 +1,11 @@
+stages:
+    - deploy
+
+on_master_push:
+    stage: deploy
+    script:
+    - echo "on_master_push"
+    - bash ./deploy.sh
+    only:
+    - master
+
